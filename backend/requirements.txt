@@ -2,3 +2,5 @@ agno==2.2.13
 openai>=2.8.0
 python-dotenv>=1.0.0
 pyyaml>=6.0
+sqlalchemy>=2.0.0
+fastapi[standard]>=0.115.0
