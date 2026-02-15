@@ -1,9 +1,12 @@
 """
 Web Builder Coding Agent - AgentOS 服务入口（Web UI 模式）
 通过 AgentOS 暴露 Agent，配合 AgentUI 前端提供公网可访问的聊天界面
+
+v2: Developer Agent 对外暴露，QA Agent 在 Workflow 中后台运行
+    AgentOS 模式下仍使用单 Agent 对话体验（对用户透明），
+    CLI 模式使用完整 Workflow（Developer + QA）。
 """
 import os
-import uuid
 import yaml
 from pathlib import Path
 from dotenv import load_dotenv
@@ -18,7 +21,7 @@ from agno.db.sqlite import SqliteDb
 # ---------------------------------------------------------------------------
 # 配置
 # ---------------------------------------------------------------------------
-load_dotenv()
+load_dotenv(override=True)
 
 API_KEY = os.getenv("OPENAI_API_KEY", "")
 BASE_URL = os.getenv("OPENAI_BASE_URL", "https://kspmas.ksyun.com/v1")
@@ -58,78 +61,93 @@ def load_all_skills_info() -> str:
     return "\n".join(parts)
 
 
-def build_runtime_instructions() -> list[str]:
-    """构建运行时指令，注入到 Agent 的 instructions 中"""
+def build_system_message() -> str:
+    """构建完整的 system_message：系统提示词 + 运行时上下文 + Skills 信息"""
+    # 加载宪法级系统提示词
+    base_prompt = load_system_prompt()
+
+    # 拼接运行时上下文
     skills_info = load_all_skills_info()
 
-    return [
-        "你是【网页生成编程 Agent】(Web Builder Coding Agent)。",
-        "你的唯一目标：根据用户需求，在工作目录中生成一个可运行的前端网页项目。",
-        "",
-        "## 工作目录",
-        f"所有文件操作必须在 {WORKSPACE_DIR} 下进行。",
-        "每次生成任务请先创建一个子目录作为项目根目录。",
-        "",
-        "## 可用模板（Skills）",
-        skills_info if skills_info else "（暂无模板）",
-        "",
-        "## 用户交互流程",
-        "1. 用户描述需求（如：帮我做个饭店菜单网页）",
-        "2. 你根据需求匹配合适的模板，或自由发挥",
-        "3. 制定计划（功能点、页面结构、目录结构）",
-        "4. 使用 FileTools 创建项目文件",
-        "5. 使用 ShellTools 执行 npm install && npm run build 自检",
-        "6. 如果自检失败，修复并重试（最多 2 次）",
-        "7. 最终输出交付 JSON",
-        "",
-        "## 技术栈默认值",
-        "- 框架: Vite + React + Tailwind CSS",
-        "- 包管理器: npm",
-        "- 构建命令: npm run build",
-        "",
-        "## 输出契约（最终必须输出的 JSON）",
-        '{"run_title": "项目名", "stack": "技术栈", "how_to_run": ["npm install", "npm run dev"], '
-        '"features": ["功能1"], "self_check": {"result": "pass|fail", "notes": "摘要"}}',
-        "",
-        "## 约束",
-        "- 禁止使用 emoji 作为 UI 图标，必须使用 SVG",
-        "- 禁止调用需要密钥的外部服务",
-        "- 优先少依赖、轻量实现",
-        "- 默认使用中文输出",
-    ]
+    runtime_section = f"""
+
+====================
+运行时上下文（AgentOS 模式）
+====================
+- 工作目录: {WORKSPACE_DIR}
+- 每次生成任务请先在工作目录下创建一个子目录作为项目根目录
+- 默认技术栈: Vite + React + Tailwind CSS
+- 包管理器: npm
+- 构建命令: npm run build
+
+可用模板（Skills）:
+{skills_info if skills_info else "（暂无模板）"}
+
+用户交互流程:
+1. 用户描述需求（如：帮我做个饭店菜单网页）
+2. 你根据需求匹配合适的模板，或自由发挥
+3. 按照系统提示词中的四阶段工作流执行
+4. 必须使用工具（FileTools / ShellTools）真正创建文件和执行命令
+5. 禁止跳过工具调用直接编造交付 JSON
+"""
+
+    return base_prompt + runtime_section
 
 
 # ---------------------------------------------------------------------------
-# 创建 Agent
+# 创建多个 Agent（不同模型，AgentUI 中可切换）
 # ---------------------------------------------------------------------------
 
-web_builder_agent = Agent(
-    name="Web Builder Agent",
-    model=OpenAILike(
-        id=MODEL_ID,
-        api_key=API_KEY,
-        base_url=BASE_URL,
-    ),
-    description="网页生成编程 Agent — 根据你的需求生成可运行的前端网页项目",
-    instructions=build_runtime_instructions(),
-    tools=[
-        ShellTools(base_dir=WORKSPACE_DIR),
-        FileTools(base_dir=WORKSPACE_DIR),
-    ],
-    # 会话持久化
-    db=SqliteDb(db_file=str(DB_DIR / "agents.db")),
-    add_datetime_to_context=True,
-    add_history_to_context=True,
-    num_history_runs=5,
-    markdown=True,
-    debug_mode=True,
+def create_agent(name: str, model_id: str, description: str) -> Agent:
+    """工厂函数：创建指定模型的 Web Builder Agent"""
+    return Agent(
+        name=name,
+        model=OpenAILike(
+            id=model_id,
+            api_key=API_KEY,
+            base_url=BASE_URL,
+        ),
+        description=description,
+        system_message=build_system_message(),
+        tools=[
+            ShellTools(base_dir=WORKSPACE_DIR),
+            FileTools(base_dir=WORKSPACE_DIR),
+        ],
+        add_datetime_to_context=True,
+        add_history_to_context=True,
+        num_history_runs=5,
+        markdown=True,
+        debug_mode=True,
+    )
+
+# 主力模型
+agent_codex = create_agent(
+    name="Web Builder (GPT-5.3-Codex)",
+    model_id="gpt-5.3-codex",
+    description="代码专用模型 — function calling 强，适合生成完整网页项目",
+)
+
+# 备选模型
+agent_glm = create_agent(
+    name="Web Builder (GLM-5)",
+    model_id="glm-5",
+    description="智谱 GLM-5 — 中文理解强，适合中文网页需求",
+)
+
+agent_kimi = create_agent(
+    name="Web Builder (Kimi-K2.5)",
+    model_id="kimi-k2.5",
+    description="Kimi K2.5 — 长上下文，适合复杂需求分析",
 )
 
 # ---------------------------------------------------------------------------
-# AgentOS 服务
+# AgentOS 服务（注册所有 Agent，UI 中可切换）
 # ---------------------------------------------------------------------------
 
-agent_os = AgentOS(agents=[web_builder_agent])
+agent_os = AgentOS(
+    agents=[agent_codex, agent_glm, agent_kimi],
+    db=SqliteDb(db_file=str(DB_DIR / "agents.db")),
+)
 app = agent_os.get_app()
 
 if __name__ == "__main__":
@@ -140,7 +158,8 @@ if __name__ == "__main__":
         exit(1)
 
     print(f"\n{'='*60}")
-    print(f"  Web Builder Agent - AgentOS 服务")
+    print(f"  Web Builder Agent v2 - AgentOS 服务")
+    print(f"  模式: Developer Agent (AgentOS) + QA Agent (后台)")
     print(f"  后端地址: http://{HOST}:{PORT}")
     print(f"  前端连接: 在 AgentUI 中输入 http://<你的VPS公网IP>:{PORT}")
     print(f"{'='*60}\n")

@@ -1,0 +1,29 @@
+# 环境变量（含 API 密钥，绝对不能提交）
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Node
+node_modules/
+
+# macOS
+.DS_Store
+
+# 临时文件 & 生成产物
+backend/tmp/
+backend/workspace/*/
+artifacts/
+logs/
+
+# IDE
+.idea/
+.vscode/
+
+# Claude Code
+.claude/
