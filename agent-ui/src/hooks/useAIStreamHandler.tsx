@@ -123,10 +123,36 @@ const useAIChatStreamHandler = () => {
         return prevMessages
       })
 
+      // Extract uploaded files and generate local preview DataURLs (no memory leak)
+      const uploadedFiles = formData
+        .getAll('files')
+        .filter((entry): entry is File => entry instanceof File && entry.type.startsWith('image/'))
+
+      const userImages =
+        uploadedFiles.length > 0
+          ? await Promise.all(
+              uploadedFiles.map(
+                (file) =>
+                  new Promise<{ url: string; revised_prompt: string }>(
+                    (resolve) => {
+                      const reader = new FileReader()
+                      reader.onloadend = () =>
+                        resolve({
+                          url: reader.result as string,
+                          revised_prompt: file.name
+                        })
+                      reader.readAsDataURL(file)
+                    }
+                  )
+              )
+            )
+          : undefined
+
       addMessage({
         role: 'user',
         content: formData.get('message') as string,
-        created_at: Math.floor(Date.now() / 1000)
+        created_at: Math.floor(Date.now() / 1000),
+        ...(userImages && userImages.length > 0 ? { images: userImages } : {})
       })
 
       addMessage({

@@ -84,8 +84,11 @@ const UserMessage = memo(({ message }: MessageProps) => {
       <div className="flex-shrink-0">
         <Icon type="user" size="sm" />
       </div>
-      <div className="text-md rounded-lg font-geist text-secondary">
-        {message.content}
+      <div className="flex flex-col gap-2 text-md rounded-lg font-geist text-secondary">
+        {message.content && <span>{message.content}</span>}
+        {message.images && message.images.length > 0 && (
+          <Images images={message.images} />
+        )}
       </div>
     </div>
   )
