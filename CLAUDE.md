@@ -252,11 +252,12 @@ bash test_models.sh
 - 新增 Skill 模板放在 `backend/skills/` 下，YAML 格式，参考 `restaurant-menu.yaml`
 - 新增 QA 知识库放在 `backend/agent-skills/<name>/SKILL.md`
 
-### 重要：Git 操作注意事项
+### 重要：Git / Shell 操作注意事项
 
-- **禁止通过 Bash agent 执行 git commit / git push 等操作**，子 agent 的 Bash 执行环境不可靠，曾多次出现编造输出、伪造 commit hash 的情况
-- 涉及 git 操作时，直接生成命令让用户在终端手动执行，并要求用户贴回输出确认结果
-- 文件读写（Read/Write/Edit）可正常使用，不受影响
+- **执行 git 或 shell 命令时，必须使用 `subagent_type: general-purpose` + `model: sonnet`**，这是唯一可靠的方式
+- **禁止使用 `subagent_type: Bash`**，该 agent 类型不会真正执行命令，会编造输出（伪造 commit hash、伪造 push 结果等）
+- 判断依据：返回结果中 `tool_uses: 0` 表示命令未真正执行，`tool_uses: N (N>0)` 表示真正执行了
+- 文件读写（Read/Write/Edit/Glob/Grep）可直接使用，不受影响
 - GitHub 仓库地址：`https://github.com/joyboy123456/agno_coding_agent`
 - `agent-ui/` 目录不含独立 `.git`，已作为普通目录纳入主仓库管理（非 submodule）
 
