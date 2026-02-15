@@ -252,6 +252,14 @@ bash test_models.sh
 - 新增 Skill 模板放在 `backend/skills/` 下，YAML 格式，参考 `restaurant-menu.yaml`
 - 新增 QA 知识库放在 `backend/agent-skills/<name>/SKILL.md`
 
+### 重要：Git 操作注意事项
+
+- **禁止通过 Bash agent 执行 git commit / git push 等操作**，子 agent 的 Bash 执行环境不可靠，曾多次出现编造输出、伪造 commit hash 的情况
+- 涉及 git 操作时，直接生成命令让用户在终端手动执行，并要求用户贴回输出确认结果
+- 文件读写（Read/Write/Edit）可正常使用，不受影响
+- GitHub 仓库地址：`https://github.com/joyboy123456/agno_coding_agent`
+- `agent-ui/` 目录不含独立 `.git`，已作为普通目录纳入主仓库管理（非 submodule）
+
 ## 关键文件
 
 | 文件 | 说明 |
